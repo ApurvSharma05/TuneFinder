@@ -1,4 +1,4 @@
-# 🎵 TuneFinder (FastAPI Edition)
+# 🎵 TuneFinder
 
 **TuneFinder** is a next-generation music discovery engine built with **FastAPI**, **Spotipy (Spotify Web API)**, and modern async web architecture. It allows users to find tailored tracks and preview music based on combinations of artists, genres, and audio moods (e.g. Chill, Energetic, Deep Focus, Party, Melancholy, Workout).
 
