@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Mood presets with target Spotify audio features
+# Mood presets with target Spotify audio features & discovery metadata
 MOOD_PRESETS: Dict[str, Dict[str, Any]] = {
     "chill": {
         "label": "Chill & Relax",
@@ -69,6 +69,42 @@ MOOD_PRESETS: Dict[str, Dict[str, Any]] = {
     }
 }
 
+MOOD_SEARCH_MAP: Dict[str, List[str]] = {
+    "chill": ["chill vibes", "lo-fi chill", "acoustic mellow", "ambient relaxation", "indie chill", "relaxing beats"],
+    "energetic": ["energetic dance", "high energy edm", "uptempo pop", "electro banger", "driving beats", "club anthem"],
+    "focus": ["deep focus instrumental", "ambient study", "lo-fi study beats", "classical focus", "calm piano instrumental"],
+    "party": ["party dance hits", "club anthems", "celebration pop", "disco party", "dancefloor hits", "party bangers"],
+    "melancholy": ["sad acoustic ballads", "heartbreak indie", "melancholy piano", "emotional songs", "rainy day indie"],
+    "workout": ["workout motivation", "high bpm gym", "hard rock workout", "fast tempo edm", "power workout beats"],
+    "romance": ["romantic love songs", "sensual r&b", "soul ballads", "smooth romance", "acoustic love songs"],
+    "latenight": ["late night drive", "synthwave night", "midnight vibes", "dark synth-pop", "lofi night beats"]
+}
+
+GENRE_SUBGENRES: Dict[str, List[str]] = {
+    "pop": ["pop hits", "dance pop", "synth pop", "indie pop", "electropop", "bedroom pop", "global pop"],
+    "rock": ["classic rock", "indie rock", "alternative rock", "hard rock", "modern rock", "garage rock", "grunge"],
+    "hip-hop": ["hip hop", "rap classics", "boom bap", "melodic rap", "trap hits", "conscious hip hop"],
+    "indie": ["indie alternative", "indie pop", "indie rock", "indie folk", "dream pop", "shoegaze"],
+    "electronic": ["electronic dance", "house music", "synthwave", "techno", "chillstep", "electro house"],
+    "dance": ["dance pop", "club hits", "house dance", "edm party", "nu-disco", "eurodance"],
+    "r-n-b": ["contemporary r&b", "neo-soul", "smooth r&b", "90s r&b", "rhythm and blues", "urban soul"],
+    "jazz": ["jazz classics", "smooth jazz", "bebop", "modern jazz", "vocal jazz", "cool jazz", "jazz fusion"],
+    "classical": ["classical piano", "orchestral masterpieces", "modern classical", "baroque strings", "cinematic classical"],
+    "metal": ["heavy metal", "thrash metal", "metalcore", "progressive metal", "power metal", "nu metal"],
+    "country": ["modern country", "country classics", "alt-country", "country pop", "bluegrass"],
+    "folk": ["folk acoustic", "indie folk", "contemporary folk", "traditional folk", "americana"],
+    "reggae": ["reggae roots", "dub", "dancehall", "reggae fusion", "lovers rock"],
+    "soul": ["classic soul", "motown", "neo soul", "southern soul", "vintage soul"],
+    "punk": ["punk rock", "pop punk", "post-punk", "skate punk", "hardcore punk"],
+    "ambient": ["ambient soundscapes", "space ambient", "meditation ambient", "dark ambient", "drone ambient"],
+    "latin": ["latin pop", "reggaeton hits", "latin rock", "bossa nova", "salsa", "bachata"],
+    "k-pop": ["k-pop hits", "k-pop dance", "k-pop girl group", "k-indie", "k-pop boy group"],
+    "blues": ["blues rock", "delta blues", "chicago blues", "electric blues", "soul blues"],
+    "funk": ["funk grooves", "70s funk", "p-funk", "modern funk", "disco funk"],
+    "disco": ["disco classics", "nu-disco", "italo disco", "funk disco", "retro disco"],
+    "acoustic": ["acoustic guitar", "acoustic pop", "unplugged", "fingerstyle acoustic", "acoustic covers"]
+}
+
 CURATED_GENRES = [
     "pop", "rock", "hip-hop", "indie", "electronic", "dance", "r-n-b", 
     "jazz", "classical", "metal", "country", "folk", "reggae", "soul", 
@@ -81,7 +117,6 @@ class SpotifyService:
         self.client_id = os.getenv("SPOTIPY_CLIENT_ID")
         self.client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
         self._sp: Optional[spotipy.Spotify] = None
-        self._cached_genres: Optional[List[str]] = None
 
     def _get_client(self) -> spotipy.Spotify:
         if not self.client_id or not self.client_secret:
@@ -170,139 +205,171 @@ class SpotifyService:
                 "meta": {"source": "none"}
             }
 
-        seed_artists = []
-        seed_genres = []
-        target_features = {}
+        tracks_pool = []
+        seen_ids = set()
+
+        def add_raw_track(t):
+            if t and t.get("id") and t["id"] not in seen_ids:
+                seen_ids.add(t["id"])
+                tracks_pool.append(t)
+
         matched_artist_name = None
-        artist_top_tracks = []
+        source_parts = []
 
-        # 1. Process Mood if provided
-        if mood and mood.lower() in MOOD_PRESETS:
-            preset = MOOD_PRESETS[mood.lower()]
-            target_features = preset.get("features", {})
+        try:
+            # -------------------------------------------------------------
+            # Strategy A: User provided specific Artist
+            # -------------------------------------------------------------
+            if artist and artist.strip():
+                clean_artist = artist.strip()
+                search_res = sp.search(q=clean_artist, type="artist", limit=3)
+                artist_items = search_res.get("artists", {}).get("items", [])
 
-        # 2. Process Artist if provided
-        if artist and artist.strip():
-            search_res = sp.search(q=artist.strip(), type="artist", limit=1)
-            artist_items = search_res.get("artists", {}).get("items", [])
-            if artist_items:
-                artist_obj = artist_items[0]
-                seed_artists.append(artist_obj["id"])
-                matched_artist_name = artist_obj["name"]
+                if artist_items:
+                    primary_artist = artist_items[0]
+                    matched_artist_name = primary_artist["name"]
+                    source_parts.append(f"Artist: {matched_artist_name}")
 
-                # Fetch top tracks for this artist as high-relevance pool
+                    # 1. Pull artist top tracks
+                    try:
+                        top_res = sp.artist_top_tracks(primary_artist["id"])
+                        top_tracks = top_res.get("tracks", [])
+                        if top_tracks:
+                            sampled_top = random.sample(top_tracks, min(len(top_tracks), 4))
+                            for t in sampled_top:
+                                add_raw_track(t)
+                    except Exception:
+                        pass
+
+                    # 2. Search artist catalog with random offset to explore discography
+                    try:
+                        offset = random.randint(0, 15)
+                        cat_res = sp.search(q=f'artist:"{matched_artist_name}"', type="track", limit=10, offset=offset)
+                        for t in cat_res.get("tracks", {}).get("items", []):
+                            add_raw_track(t)
+                    except Exception:
+                        pass
+
+                    # 3. If mood or genre is specified, blend search
+                    extra_terms = []
+                    if genre:
+                        extra_terms.append(genre)
+                        source_parts.append(f"Genre: {genre.title()}")
+                    if mood and mood.lower() in MOOD_SEARCH_MAP:
+                        extra_terms.append(random.choice(MOOD_SEARCH_MAP[mood.lower()]))
+                        source_parts.append(f"Mood: {MOOD_PRESETS.get(mood.lower(), {}).get('label', mood.title())}")
+                    
+                    if extra_terms:
+                        try:
+                            blend_q = f'{matched_artist_name} {" ".join(extra_terms)}'
+                            blend_res = sp.search(q=blend_q, type="track", limit=10, offset=random.randint(0, 10))
+                            for t in blend_res.get("tracks", {}).get("items", []):
+                                add_raw_track(t)
+                        except Exception:
+                            pass
+
+            # -------------------------------------------------------------
+            # Strategy B: User provided Genre (with or without mood)
+            # -------------------------------------------------------------
+            elif genre and genre.strip():
+                clean_genre = genre.strip().lower()
+                source_parts.append(f"Genre: {clean_genre.title()}")
+
+                # 1. Search top artists in this genre with random offset
+                artist_offset = random.randint(0, 20)
                 try:
-                    top_res = sp.artist_top_tracks(artist_obj["id"])
-                    artist_top_tracks = top_res.get("tracks", [])
+                    artist_res = sp.search(q=f'genre:"{clean_genre}"', type="artist", limit=20, offset=artist_offset)
+                    artists = artist_res.get("artists", {}).get("items", [])
+                    if artists:
+                        selected_artists = random.sample(artists, min(len(artists), 4))
+                        for a in selected_artists:
+                            try:
+                                top_t = sp.artist_top_tracks(a["id"]).get("tracks", [])
+                                if top_t:
+                                    sampled = random.sample(top_t, min(len(top_t), 3))
+                                    for t in sampled:
+                                        add_raw_track(t)
+                            except Exception:
+                                pass
                 except Exception:
                     pass
 
-        # 3. Process Genre
-        if genre and genre.strip():
-            available = self.get_available_genres()
-            clean_genre = genre.strip().lower()
-            if clean_genre in available:
-                seed_genres.append(clean_genre)
-            else:
-                # Approximate match
-                for g in available:
-                    if clean_genre in g or g in clean_genre:
-                        seed_genres.append(g)
-                        break
+                # 2. Pick a randomized subgenre / keyword and search tracks with random offset
+                subgenres = GENRE_SUBGENRES.get(clean_genre, [clean_genre])
+                chosen_sub = random.choice(subgenres)
 
-        # Fallback genre from mood if no genre or artist specified
-        if not seed_artists and not seed_genres and mood and mood.lower() in MOOD_PRESETS:
-            fallback_list = MOOD_PRESETS[mood.lower()].get("fallback_genres", [])
-            for fg in fallback_list:
-                if fg in self.get_available_genres():
-                    seed_genres.append(fg)
-                    break
+                mood_term = ""
+                if mood and mood.lower() in MOOD_SEARCH_MAP:
+                    mood_term = random.choice(MOOD_SEARCH_MAP[mood.lower()])
+                    source_parts.append(f"Mood: {MOOD_PRESETS.get(mood.lower(), {}).get('label', mood.title())}")
 
-        # Default fallback if nothing specified
-        if not seed_artists and not seed_genres:
-            seed_genres = ["pop"]
+                try:
+                    query = f"{chosen_sub} {mood_term}".strip()
+                    track_res = sp.search(q=query, type="track", limit=15, offset=random.randint(0, 20))
+                    for t in track_res.get("tracks", {}).get("items", []):
+                        add_raw_track(t)
+                except Exception:
+                    pass
 
-        # Ensure max 5 seeds combined (Spotify API constraint)
-        seed_artists = seed_artists[:2]
-        seed_genres = seed_genres[: (5 - len(seed_artists))]
+            # -------------------------------------------------------------
+            # Strategy C: User provided only Mood
+            # -------------------------------------------------------------
+            elif mood and mood.lower() in MOOD_SEARCH_MAP:
+                mood_key = mood.lower()
+                source_parts.append(f"Mood: {MOOD_PRESETS.get(mood_key, {}).get('label', mood_key.title())}")
+                mood_terms = MOOD_SEARCH_MAP[mood_key]
+                chosen_terms = random.sample(mood_terms, min(len(mood_terms), 2))
 
-        tracks_result = []
-        source_desc = ""
+                for term in chosen_terms:
+                    try:
+                        track_res = sp.search(q=term, type="track", limit=15, offset=random.randint(0, 25))
+                        for t in track_res.get("tracks", {}).get("items", []):
+                            add_raw_track(t)
+                    except Exception:
+                        pass
 
-        try:
-            # Build Spotify recommendations query parameters
-            query_params = {
-                "limit": min(limit, 50),
-                **target_features
-            }
-            if seed_artists:
-                query_params["seed_artists"] = seed_artists
-            if seed_genres:
-                query_params["seed_genres"] = seed_genres
+            # -------------------------------------------------------------
+            # Strategy D: Fill / Wildcard Discovery (Surprise or top up)
+            # -------------------------------------------------------------
+            if len(tracks_pool) < limit:
+                wildcards = [
+                    "top hits", "viral anthems", "trending tracks", 
+                    "global hits", "indie vibes", "classic anthems", "chart toppers"
+                ]
+                chosen_wildcard = random.choice(wildcards)
+                try:
+                    fill_res = sp.search(q=chosen_wildcard, type="track", limit=limit, offset=random.randint(0, 30))
+                    for t in fill_res.get("tracks", {}).get("items", []):
+                        add_raw_track(t)
+                except Exception:
+                    pass
 
-            recs = sp.recommendations(**query_params)
-            rec_tracks = recs.get("tracks", [])
+            # Shuffle tracks to ensure non-deterministic, dynamic ordering
+            random.shuffle(tracks_pool)
 
-            # If we searched for an artist, combine a couple of top tracks with discovery recommendations
-            if artist_top_tracks:
-                source_desc = f"Top & Recommended tracks based on '{matched_artist_name}'"
-                sample_top = random.sample(artist_top_tracks, min(len(artist_top_tracks), 3))
-                combined = sample_top + [t for t in rec_tracks if t.get("id") not in [x.get("id") for x in sample_top]]
-                tracks_result = [self.format_track(t) for t in combined[:limit]]
-            else:
-                filters_desc = []
-                if genre:
-                    filters_desc.append(f"Genre: {genre}")
-                if mood and mood in MOOD_PRESETS:
-                    filters_desc.append(f"Mood: {MOOD_PRESETS[mood]['label']}")
-                source_desc = "Recommendations for " + (", ".join(filters_desc) if filters_desc else "Trending")
-                tracks_result = [self.format_track(t) for t in rec_tracks[:limit]]
+            # Format final tracks
+            formatted_tracks = [self.format_track(t) for t in tracks_pool[:limit]]
+
+            source_title = "Discovery Mix"
+            if source_parts:
+                source_title = " • ".join(source_parts)
+            elif matched_artist_name:
+                source_title = f"Tracks inspired by {matched_artist_name}"
 
             return {
                 "success": True,
-                "tracks": tracks_result,
-                "count": len(tracks_result),
+                "tracks": formatted_tracks,
+                "count": len(formatted_tracks),
                 "meta": {
-                    "source": source_desc,
+                    "source": source_title,
                     "matched_artist": matched_artist_name,
-                    "seeds_used": {"artists": seed_artists, "genres": seed_genres},
+                    "genre": genre,
                     "mood": mood
                 }
             }
 
-        except SpotifyException as se:
-            # If recommendation endpoint fails (e.g. Spotify API seed changes), fallback to high-quality search
-            query_parts = []
-            if artist:
-                query_parts.append(f'artist:"{artist}"')
-            if genre:
-                query_parts.append(f'genre:"{genre}"')
-            if mood and mood in MOOD_PRESETS:
-                fallback_genres = MOOD_PRESETS[mood].get("fallback_genres", [])
-                if fallback_genres and not genre:
-                    query_parts.append(f'genre:"{fallback_genres[0]}"')
-            
-            fallback_query = " ".join(query_parts) if query_parts else (artist or genre or "top hits 2024")
-            search_fallback = sp.search(q=fallback_query, type="track", limit=min(limit, 50))
-            fallback_tracks = [self.format_track(t) for t in search_fallback.get("tracks", {}).get("items", [])]
-            
-            # If specific query returned 0, try broader search
-            if not fallback_tracks and (artist or genre):
-                broad_query = f"{artist or ''} {genre or ''}".strip()
-                search_fallback = sp.search(q=broad_query, type="track", limit=min(limit, 50))
-                fallback_tracks = [self.format_track(t) for t in search_fallback.get("tracks", {}).get("items", [])]
-
-            return {
-                "success": True,
-                "tracks": fallback_tracks,
-                "count": len(fallback_tracks),
-                "meta": {
-                    "source": f"Results for '{artist or genre or mood or 'Top Hits'}'",
-                    "note": "Smart discovery search"
-                }
-            }
         except Exception as e:
-            print(f"[SpotifyService] Unexpected error: {e}")
+            print(f"[SpotifyService] Unexpected discovery error: {e}")
             return {
                 "success": False,
                 "error": str(e),
