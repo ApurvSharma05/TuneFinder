@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content-container">
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <div class="hero-pill">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>FastAPI + Spotify Discovery</span>
+            </div>
+            <h1 class="hero-title">Find Your Next <span class="gradient-text">Favorite Sound</span></h1>
+            <p class="hero-subtitle">
+                Explore personalized tracks by blending your favorite artists, genres, and audio moods with real-time Spotify intelligence.
+            </p>
+        </div>
+    </section>
+
+    <!-- Discovery Search Console -->
+    <section class="discovery-card glass-panel">
+        <form id="discoveryForm" class="discovery-form" onsubmit="return false;">
+            
+            <!-- Row 1: Search Inputs -->
+            <div class="form-grid">
+                <!-- Artist Search with Autocomplete -->
+                <div class="form-group artist-group">
+                    <label for="artistInput" class="form-label">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span>Artist or Band</span>
+                    </label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input 
+                            type="text" 
+                            id="artistInput" 
+                            name="artist" 
+                            placeholder="e.g. Daft Punk, Taylor Swift, The Weeknd..." 
+                            autocomplete="off"
+                            class="form-control"
+                        >
+                        <button type="button" id="clearArtistBtn" class="clear-btn" style="display: none;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <!-- Autocomplete Dropdown -->
+                    <div id="artistDropdown" class="autocomplete-dropdown" style="display: none;"></div>
+                </div>
+
+                <!-- Genre Selector -->
+                <div class="form-group genre-group">
+                    <label for="genreSelect" class="form-label">
+                        <i class="fa-solid fa-guitar"></i>
+                        <span>Genre</span>
+                    </label>
+                    <div class="select-wrapper">
+                        <select id="genreSelect" name="genre" class="form-control form-select">
+                            <option value="">Any Genre</option>
+                            {% for g in genres %}
+                            <option value="{{ g }}">{{ g|capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-chevron"></i>
+                    </div>
+                </div>
+
+                <!-- Track Limit Selector -->
+                <div class="form-group limit-group">
+                    <label for="limitSelect" class="form-label">
+                        <i class="fa-solid fa-list-ol"></i>
+                        <span>Tracks</span>
+                    </label>
+                    <div class="select-wrapper">
+                        <select id="limitSelect" name="limit" class="form-control form-select">
+                            <option value="6">6 Tracks</option>
+                            <option value="12" selected>12 Tracks</option>
+                            <option value="24">24 Tracks</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-chevron"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Genre Pills -->
+            <div class="quick-genres">
+                <span class="quick-label">Trending Genres:</span>
+                <div class="genre-pills">
+                    <button type="button" class="genre-pill" data-genre="pop">Pop</button>
+                    <button type="button" class="genre-pill" data-genre="indie">Indie</button>
+                    <button type="button" class="genre-pill" data-genre="electronic">Electronic</button>
+                    <button type="button" class="genre-pill" data-genre="hip-hop">Hip-Hop</button>
+                    <button type="button" class="genre-pill" data-genre="rock">Rock</button>
+                    <button type="button" class="genre-pill" data-genre="r-n-b">R&B</button>
+                    <button type="button" class="genre-pill" data-genre="chill">Chill</button>
+                    <button type="button" class="genre-pill" data-genre="jazz">Jazz</button>
+                </div>
+            </div>
+
+            <!-- Mood Selector -->
+            <div class="mood-section">
+                <div class="mood-header">
+                    <label class="form-label">
+                        <i class="fa-solid fa-masks-theater"></i>
+                        <span>Select Mood Atmosphere</span>
+                    </label>
+                    <span class="mood-hint" id="moodHint">Select a mood to shape audio tempo & valence</span>
+                </div>
+                <div class="mood-grid" id="moodGrid">
+                    {% for key, mood in moods.items() %}
+                    <div class="mood-card" data-mood="{{ key }}" title="{{ mood.description }}">
+                        <span class="mood-icon">{{ mood.icon }}</span>
+                        <span class="mood-label">{{ mood.label }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="selectedMood" name="mood" value="">
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="form-actions">
+                <button type="button" id="surpriseBtn" class="btn btn-secondary">
+                    <i class="fa-solid fa-shuffle"></i>
+                    <span>Surprise Me</span>
+                </button>
+                <button type="submit" id="discoverBtn" class="btn btn-primary">
+                    <i class="fa-solid fa-sparkles"></i>
+                    <span>Discover Tracks</span>
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Results Section -->
+    <section class="results-section" id="resultsSection">
+        <!-- Results Header Bar -->
+        <div class="results-header" id="resultsHeader" style="display: none;">
+            <div class="results-meta">
+                <h2 class="results-title" id="resultsTitle">Recommended Tracks</h2>
+                <div class="active-filters" id="activeFilters"></div>
+            </div>
+            <div class="results-controls">
+                <button id="refreshBtn" class="btn btn-icon" title="Refresh Recommendations">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Skeleton Loading State -->
+        <div class="tracks-grid" id="skeletonLoader" style="display: none;">
+            {% for i in range(6) %}
+            <div class="track-card skeleton-card">
+                <div class="skeleton-art skeleton-box"></div>
+                <div class="skeleton-info">
+                    <div class="skeleton-line skeleton-box" style="width: 80%; height: 18px;"></div>
+                    <div class="skeleton-line skeleton-box" style="width: 50%; height: 14px;"></div>
+                    <div class="skeleton-meta">
+                        <div class="skeleton-pill skeleton-box"></div>
+                        <div class="skeleton-pill skeleton-box"></div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Recommendations Tracks Grid -->
+        <div class="tracks-grid" id="tracksGrid"></div>
+
+        <!-- Empty / Welcome State -->
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+                <i class="fa-solid fa-music"></i>
+            </div>
+            <h3>Ready to tune in?</h3>
+            <p>Enter an artist, pick a genre, or select a mood above and hit <strong>Discover Tracks</strong> to generate your tailored mix.</p>
+            <div class="quick-starters">
+                <span>Try one of these:</span>
+                <button class="starter-tag" onclick="quickSearch('Daft Punk', 'electronic', 'energetic')">⚡ Daft Punk + Energetic</button>
+                <button class="starter-tag" onclick="quickSearch('', 'chill', 'chill')">☕ Chill Beats</button>
+                <button class="starter-tag" onclick="quickSearch('Billie Eilish', 'pop', 'melancholy')">🌧️ Billie Eilish + Melancholy</button>
+                <button class="starter-tag" onclick="quickSearch('', 'rock', 'workout')">🔥 Rock Workout</button>
+            </div>
+        </div>
+
+    </section>
+
+</div>
+{% endblock %}

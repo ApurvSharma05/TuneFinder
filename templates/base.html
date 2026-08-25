@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TuneFinder - AI & Spotify Powered Music Discovery Engine. Find tailored tracks by artist, genre, and mood.">
+    <title>{% block title %}TuneFinder — Next-Gen Music Discovery{% endblock %}</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Background Animated Gradient Orbs -->
+    <div class="ambient-glow orb-1"></div>
+    <div class="ambient-glow orb-2"></div>
+    <div class="ambient-glow orb-3"></div>
+
+    <!-- Header Navigation -->
+    <header class="navbar">
+        <div class="nav-container">
+            <a href="/" class="brand-logo">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-compact-disc fa-spin-pulse"></i>
+                </div>
+                <div class="logo-text">
+                    <span class="logo-title">Tune<span class="accent-text">Finder</span></span>
+                    <span class="logo-badge">FastAPI v2.0</span>
+                </div>
+            </a>
+
+            <div class="nav-actions">
+                <a href="/docs" target="_blank" class="nav-btn docs-btn" title="OpenAPI Documentation">
+                    <i class="fa-solid fa-code"></i>
+                    <span>Swagger API</span>
+                </a>
+                <div class="spotify-status-badge" id="spotifyStatus">
+                    <span class="status-dot online"></span>
+                    <span>Spotify Connected</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-wrapper">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Persistent Bottom Audio Player Bar -->
+    <div class="player-bar" id="playerBar">
+        <div class="player-container">
+            <div class="player-track-info">
+                <img id="playerArtwork" src="" alt="Album Artwork" class="player-art">
+                <div class="player-meta">
+                    <div id="playerTitle" class="player-title">No track playing</div>
+                    <div id="playerArtist" class="player-artist">Select a track preview below</div>
+                </div>
+            </div>
+
+            <div class="player-controls-wrapper">
+                <div class="player-buttons">
+                    <button class="player-btn control-secondary" id="playerPrevBtn" title="Previous Track">
+                        <i class="fa-solid fa-backward-step"></i>
+                    </button>
+                    <button class="player-btn control-main" id="playerPlayBtn" title="Play / Pause (Spacebar)">
+                        <i class="fa-solid fa-play" id="playerPlayIcon"></i>
+                    </button>
+                    <button class="player-btn control-secondary" id="playerNextBtn" title="Next Track">
+                        <i class="fa-solid fa-forward-step"></i>
+                    </button>
+                </div>
+                <div class="player-progress-container">
+                    <span id="playerCurrentTime" class="time-label">0:00</span>
+                    <div class="progress-bar-track" id="progressBarTrack">
+                        <div class="progress-bar-fill" id="progressBarFill"></div>
+                    </div>
+                    <span id="playerDuration" class="time-label">0:30</span>
+                </div>
+            </div>
+
+            <div class="player-extra-actions">
+                <div class="volume-control">
+                    <i class="fa-solid fa-volume-high" id="volumeIcon"></i>
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.8" class="volume-slider">
+                </div>
+                <a id="playerSpotifyLink" href="#" target="_blank" class="spotify-external-link" title="Open on Spotify">
+                    <i class="fa-brands fa-spotify"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Audio Element -->
+    <audio id="globalAudioPlayer" preload="none"></audio>
+
+    <!-- Notification Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', path='js/script.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
